@@ -1,0 +1,143 @@
+<html>
+
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/onnxjs/dist/onnx.min.js"></script>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        canvas {
+            border: 1px solid black;
+            margin: 0.25em;
+            touch-action: none;
+        }
+
+        /* #mini-canvas {
+            display: none;
+        } */
+
+        #predictions {
+            margin-top: 1em;
+            font-size: 2em;
+        }
+
+        button {
+            margin: 0.25em;
+            padding: 1em;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Shape Reco Example</h1>
+    <canvas id="canvas" width="400" height="400"></canvas>
+    <canvas id="mini-canvas" width="64" height="64"></canvas>
+    <button onclick="ctx.clearRect(0, 0, canvas.width, canvas.height); predictions.innerHTML = '';">Clear</button>
+    <!-- <button onclick="runExample();">Run</button> -->
+    <div id="predictions"></div>
+</body>
+<script>
+    const session = new onnx.InferenceSession();
+    async function init() {
+        await session.loadModel("./FioShapes.onnx");
+        runExample();
+    }
+
+    var canvas = document.getElementById('canvas');
+    var ctx = canvas.getContext('2d');
+    var minicanvas = document.getElementById('mini-canvas');
+    var minictx = minicanvas.getContext('2d');
+    // draw a square in the center of the canvas
+    ctx.strokeStyle = 'grey';
+    ctx.lineWidth = 10;
+    ctx.lineCap = "round";
+    ctx.strokeRect(100, 100, 200, 200);
+
+    // allow drawing when click on the canvas
+    var isDrawing = false;
+    var lastX;
+    var lastY;
+    function addListenerMulti(element, eventNames, listener) {
+        var events = eventNames.split(" ");
+        for (var i = 0, iLen = events.length; i < iLen; i++) {
+            element.addEventListener(events[i], listener, false);
+        }
+    }
+    addListenerMulti(canvas, "pointerdown mousedown", function (e) {
+        isDrawing = true;
+        lastX = e.offsetX;
+        lastY = e.offsetY;
+    });
+    addListenerMulti(canvas, "pointermove mousemove", function (e) {
+        if (isDrawing === true) {
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(e.offsetX, e.offsetY);
+            ctx.stroke();
+            lastX = e.offsetX;
+            lastY = e.offsetY;
+        }
+    });
+    addListenerMulti(canvas, "pointerup mouseup", function (e) {
+        isDrawing = false;
+        runExample();
+    });
+
+    async function runExample() {
+        minictx.clearRect(0, 0, minicanvas.width, minicanvas.height);
+        minictx.drawImage(canvas, 0, 0, minicanvas.width, minicanvas.height);
+        img = minictx.getImageData(0, 0, minicanvas.width, minicanvas.height);
+        x = new Float32Array(minicanvas.width * minicanvas.height * 3);
+        for (let i = 0; i < minicanvas.height; i++) {
+            for (let j = 0; j < minicanvas.width; j++) {
+                a = img.data[4 * (i * minicanvas.width + j) + 3] / 255;
+                //// negative
+                // x[0 * minicanvas.width * minicanvas.height + i * minicanvas.width + j] = 1 - ((1 - a) + (a * (img.data[4 * (i * minicanvas.width + j) + 0] / 255)));
+                // x[1 * minicanvas.width * minicanvas.height + i * minicanvas.width + j] = 1 - ((1 - a) + (a * (img.data[4 * (i * minicanvas.width + j) + 1] / 255)));
+                // x[2 * minicanvas.width * minicanvas.height + i * minicanvas.width + j] = 1 - ((1 - a) + (a * (img.data[4 * (i * minicanvas.width + j) + 2] / 255)));
+                //// positive
+                x[0 * minicanvas.width * minicanvas.height + i * minicanvas.width + j] = (1 - a) + (a * (img.data[4 * (i * minicanvas.width + j) + 0] / 255));
+                x[1 * minicanvas.width * minicanvas.height + i * minicanvas.width + j] = (1 - a) + (a * (img.data[4 * (i * minicanvas.width + j) + 1] / 255));
+                x[2 * minicanvas.width * minicanvas.height + i * minicanvas.width + j] = (1 - a) + (a * (img.data[4 * (i * minicanvas.width + j) + 2] / 255));
+            }
+        }
+        //// compute x mean, min, max
+        // var x_min = 1000;
+        // var x_max = 0;
+        // var x_mean = 0;
+        // for (let i = 0; i < x.length; i++) {
+        //     x_mean += x[i];
+        //     if (x[i] < x_min) {
+        //         x_min = x[i];
+        //     }
+        //     if (x[i] > x_max) {
+        //         x_max = x[i];
+        //     }
+        // }
+        // x_mean /= x.length;
+        // console.log(x_mean, x_min, x_max);
+        const tensorX = new onnx.Tensor(x, 'float32', [1, 3, minicanvas.width, minicanvas.height]);
+        const outputMap = await session.run([tensorX]);
+        const outputValues = outputMap.values().next().value.data;
+        const class_nb = outputValues.indexOf(Math.max(...outputValues));
+        var outputValue;
+        if (class_nb == 0) {
+            outputValue = "Circle";
+        }
+        if (class_nb == 1) {
+            outputValue = "Star";
+        }
+        if (class_nb == 2) {
+            outputValue = "Triangle";
+        }
+        document.getElementById('predictions').innerHTML = outputValue + " (" + Math.round(10000 * Math.max(...outputValues)) / 100 + "%)";
+    }
+
+    init();
+
+</script>
+
+</html>
