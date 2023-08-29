@@ -13,7 +13,7 @@
         }
 
         canvas {
-            border: 1px solid black;
+            border: 1px solid rgb(141, 126, 126);
             margin: 0.25em;
             touch-action: none;
         }
@@ -47,8 +47,8 @@
     const session = new onnx.InferenceSession();
     async function init() {
         await session.loadModel("./FioShapes.onnx");
+        run()
     }
-    init();
 
     async function run() {
         console.log('run');
@@ -127,6 +127,7 @@
         }
     })
 
+    init();
     console.log('finished init')
 
 </script>
